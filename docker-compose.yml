@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  voice-agent:
+    build:
+      context: ./voice_agent
+      dockerfile: Dockerfile
+    container_name: voice-agent-app
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      - NODE_ENV=production
+      - PORT=8787
+      - AUTH_SERVER_PORT=8787
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_change_me}
+      - SUPERADMIN_USER=${SUPERADMIN_USER:-superadmin}
+      - SUPERADMIN_PASS=${SUPERADMIN_PASS:-Super@12345}
+    volumes:
+      - ./voice_agent/dist:/app/dist:ro
+      - voice_agent_logs:/app/logs
+    networks:
+      - voice-agent-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8787/api/auth/me', (res) => { process.exit(res.statusCode === 200 || res.statusCode === 401 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: voice-agent-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - voice-agent
+    networks:
+      - voice-agent-network
+
+volumes:
+  voice_agent_logs:
+
+networks:
+  voice-agent-network:
+    driver: bridge
